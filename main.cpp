@@ -1,8 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// CryptoHedgeLab — Module 2: Lock-Free Multi-Threaded Pipeline
+// CryptoHedgeLab — Module 4: UI Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
-// 3-thread pipeline:
+// 4-thread pipeline:
 //   Feed Thread   → [SPSC Queue] → Strategy Thread → [SPSC Queue] → Exec Thread
+//                                                                      ↓
+//                                                                  UI Thread (WS Server)
 //
 // Usage: ./cryptohedgelab_feed
 // Exit:  Ctrl+C (SIGINT)
@@ -17,6 +19,8 @@
 #include "core/common/signal.hpp"
 #include "core/strategy/strategy_engine.hpp"
 #include "core/execution/execution_engine.hpp"
+#include "core/ui/ui_state.hpp"
+#include "core/ui/ws_server.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -27,24 +31,23 @@
 
 int main() {
     std::printf("╔══════════════════════════════════════════════════════════╗\n");
-    std::printf("║        CryptoHedgeLab — Pipeline Core v2.0              ║\n");
-    std::printf("║  BTCUSDT | 3-Thread | Lock-Free | Latency Instrumented  ║\n");
+    std::printf("║        CryptoHedgeLab — Pipeline Core v4.0              ║\n");
+    std::printf("║  BTCUSDT | 4-Thread | Lock-Free | WebSocket UI Server   ║\n");
     std::printf("╚══════════════════════════════════════════════════════════╝\n\n");
 
     // ─── Shared State ─────────────────────────────────────────────────────
-    // All allocated here in main's stack frame — process lifetime.
-    // No heap allocation after this point in the hot path.
-
     std::atomic<bool> running{true};
 
-    // SPSC queues connecting the pipeline stages
-    // 8192 slots × ~64 bytes per Tick = 512 KB per queue (fits in L2)
     chl::SPSCRingBuffer<chl::Tick>   tick_queue;
     chl::SPSCRingBuffer<chl::Signal> signal_queue;
 
-    // Order book — updated by feed thread, read for tick enrichment
     chl::OrderBook book;
     uint64_t tick_seq = 0;
+
+    // UI State and Broadcaster
+    chl::UIState ui_state;
+    chl::UIBroadcaster ui_server(ui_state, 8080);
+    ui_server.start();
 
     // ═══════════════════════════════════════════════════════════════════════
     // Thread 2: Strategy Thread
@@ -57,7 +60,7 @@ int main() {
     // Thread 3: Execution Thread
     // ═══════════════════════════════════════════════════════════════════════
     std::thread exec_thread([&]() {
-        chl::execution_loop(signal_queue, running);
+        chl::execution_loop(signal_queue, ui_state, running);
     });
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -65,9 +68,6 @@ int main() {
     // ═══════════════════════════════════════════════════════════════════════
     boost::asio::io_context ioc;
 
-    // Callback from WebSocket — this is the hot path on the feed thread.
-    // Parses the message, updates the order book, and pushes a Tick
-    // into the lock-free queue for the strategy thread.
     auto on_message = [&book, &tick_queue, &tick_seq](std::string_view msg) {
 
         auto stream_type = chl::detect_stream_type(msg);
@@ -76,14 +76,13 @@ int main() {
             auto trade = chl::parse_trade(msg);
             if (!trade.valid) return;
 
-            // Build tick and push into pipeline
             chl::Tick tick{};
             tick.price       = trade.price;
             tick.quantity     = trade.quantity;
             tick.best_bid    = book.best_bid_price;
             tick.best_ask    = book.best_ask_price;
             tick.exchange_ts = trade.timestamp_ms;
-            tick.feed_ts     = chl::now();  // Pipeline latency starts here
+            tick.feed_ts     = chl::now();
             tick.seq         = ++tick_seq;
 
             tick_queue.try_push(tick);
@@ -92,13 +91,11 @@ int main() {
             auto depth = chl::parse_depth(msg);
             if (!depth.valid) return;
 
-            // Update local order book (feed thread only — no lock needed)
             book.update(depth.best_bid.price, depth.best_bid.qty,
                         depth.best_ask.price, depth.best_ask.qty);
 
-            // Also push a depth tick so strategy sees book updates
             chl::Tick tick{};
-            tick.price       = 0.0;  // No trade price on depth updates
+            tick.price       = 0.0;
             tick.quantity     = 0.0;
             tick.best_bid    = depth.best_bid.price;
             tick.best_ask    = depth.best_ask.price;
@@ -119,10 +116,8 @@ int main() {
     signals.async_wait([&](auto, auto) {
         std::printf("\n[Main] Shutting down pipeline ...\n");
 
-        // 1. Signal all threads to stop
         running.store(false, std::memory_order_release);
-
-        // 2. Close WebSocket and stop io_context (stops feed thread)
+        ui_server.stop();
         ws.close();
         ioc.stop();
     });
@@ -132,6 +127,7 @@ int main() {
     std::printf("[Main]   Feed thread:     main (io_context)\n");
     std::printf("[Main]   Strategy thread: spawned\n");
     std::printf("[Main]   Execution thread: spawned\n");
+    std::printf("[Main]   UI WS Server:    spawned (ws://localhost:8080)\n");
     std::printf("[Main]   Tick queue:      %zu slots\n", tick_queue.capacity());
     std::printf("[Main]   Signal queue:    %zu slots\n\n", signal_queue.capacity());
 
