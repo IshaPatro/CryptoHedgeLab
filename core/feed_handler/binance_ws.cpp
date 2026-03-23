@@ -17,7 +17,7 @@ BinanceWebSocket::BinanceWebSocket(net::io_context& ioc, MessageCallback on_mess
 }
 
 BinanceWebSocket::~BinanceWebSocket() {
-    if (connected_) {
+    if (connected_ && ws_.is_open()) {
         beast::error_code ec;
         ws_.close(websocket::close_code::normal, ec);
     }

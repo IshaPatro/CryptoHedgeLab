@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(CryptoHedgeLab VERSION 1.0.0 LANGUAGES CXX)
+project(CryptoHedgeLab VERSION 2.0.0 LANGUAGES CXX)
 
 # ─── C++ Standard ───────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 20)
@@ -34,7 +34,10 @@ if(OPENSSL_FOUND)
     message(STATUS "OpenSSL version: ${OPENSSL_VERSION}")
 endif()
 
-# ─── Module 1: Feed Core ───────────────────────────────────────────────────
+# Threads (pthread — required for std::thread, std::atomic)
+find_package(Threads REQUIRED)
+
+# ─── Module 2: Pipeline Core ───────────────────────────────────────────────
 add_executable(cryptohedgelab_feed
     main.cpp
     core/feed_handler/binance_ws.cpp
@@ -49,6 +52,7 @@ target_link_libraries(cryptohedgelab_feed PRIVATE
     Boost::system
     OpenSSL::SSL
     OpenSSL::Crypto
+    Threads::Threads
 )
 
 # ─── Platform-Specific ─────────────────────────────────────────────────────
@@ -61,8 +65,9 @@ endif()
 
 # ─── Build Summary ──────────────────────────────────────────────────────────
 message(STATUS "")
-message(STATUS "── CryptoHedgeLab Module 1: Feed Core ──")
+message(STATUS "── CryptoHedgeLab Module 2: Pipeline Core ──")
 message(STATUS "  Target: cryptohedgelab_feed")
 message(STATUS "  Standard: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "  Build: ${CMAKE_BUILD_TYPE}")
+message(STATUS "  Threading: SPSC lock-free queues + std::thread")
 message(STATUS "")
