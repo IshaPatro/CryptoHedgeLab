@@ -149,28 +149,32 @@ inline PriceLevel extract_first_level(std::string_view array_str) noexcept {
 enum class StreamType {
     TRADE,
     DEPTH,
+    FUNDING,
     UNKNOWN
 };
 
 inline StreamType detect_stream_type(std::string_view msg) noexcept {
-    // Combined stream wrapper: {"stream":"btcusdt@trade","data":{...}}
-    if (msg.find("@trade") != std::string_view::npos &&
-        msg.find("\"stream\"") != std::string_view::npos) {
+    if (msg.find("@trade") != std::string_view::npos) {
         return StreamType::TRADE;
     }
     if (msg.find("@depth") != std::string_view::npos) {
         return StreamType::DEPTH;
     }
+    if (msg.find("@markPrice") != std::string_view::npos) {
+        return StreamType::FUNDING;
+    }
     // Raw stream messages (no wrapper):
-    // Trade: {"e":"trade","E":...,"p":"67000",...}
     if (msg.find("\"e\":\"trade\"") != std::string_view::npos) {
         return StreamType::TRADE;
     }
-    // Depth: {"lastUpdateId":...,"bids":[...],"asks":[...]}
     if (msg.find("\"lastUpdateId\"") != std::string_view::npos) {
         return StreamType::DEPTH;
     }
     return StreamType::UNKNOWN;
+}
+
+inline std::string_view extract_stream(std::string_view msg) noexcept {
+    return detail::extract_quoted_value(msg, "stream");
 }
 
 
@@ -247,6 +251,16 @@ inline DepthMessage parse_depth(std::string_view msg) noexcept {
 
     depth.valid = (depth.best_bid.price > 0.0 && depth.best_ask.price > 0.0);
     return depth;
+}
+
+inline float parse_funding_rate(std::string_view msg) noexcept {
+    auto data_key = msg.find("\"data\"");
+    std::string_view data_section = msg;
+    if (data_key != std::string_view::npos) {
+        data_section = msg.substr(data_key);
+    }
+    auto r_sv = detail::extract_quoted_value(data_section, "r");
+    return static_cast<float>(detail::sv_to_double(r_sv));
 }
 
 } // namespace chl

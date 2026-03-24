@@ -1,0 +1,13 @@
+{
+    "name": "vol_straddle",
+    "entry": {
+        "condition": "vol_straddle_entry"
+    },
+    "exit": {
+        "condition": "vol_straddle_exit"
+    },
+    "size": "0.05",
+    "hedge": {
+        "enabled": "false"
+    }
+}

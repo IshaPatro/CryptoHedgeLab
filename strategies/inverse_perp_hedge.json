@@ -1,0 +1,14 @@
+{
+    "name": "inverse_perp_hedge",
+    "entry": {
+        "condition": "inverse_perp_entry"
+    },
+    "exit": {
+        "condition": "inverse_perp_exit"
+    },
+    "size": "0.1",
+    "hedge": {
+        "enabled": "true",
+        "ratio": "0.5"
+    }
+}

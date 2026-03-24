@@ -1,0 +1,14 @@
+{
+  "name": "momentum",
+  "entry": {
+    "condition": "price_up"
+  },
+  "exit": {
+    "condition": "price_down"
+  },
+  "size": 0.001,
+  "hedge": {
+    "enabled": false,
+    "ratio": 0.0
+  }
+}

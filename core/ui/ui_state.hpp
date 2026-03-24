@@ -22,6 +22,8 @@ struct UITrade {
 };
 
 struct UIState {
+    char strategy_name[32]{0};
+
     // ─── Market ───
     std::atomic<double> price{0.0};
     std::atomic<double> best_bid{0.0};

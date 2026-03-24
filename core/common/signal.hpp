@@ -11,14 +11,16 @@ namespace chl {
 enum class Action : uint8_t {
     NONE = 0,
     BUY  = 1,
-    SELL = 2
+    SELL = 2,
+    RESET_STATE = 3
 };
 
 inline const char* action_str(Action a) noexcept {
     switch (a) {
-        case Action::BUY:  return "BUY";
-        case Action::SELL: return "SELL";
-        default:           return "NONE";
+        case Action::BUY:         return "BUY";
+        case Action::SELL:        return "SELL";
+        case Action::RESET_STATE: return "RESET_STATE";
+        default:                  return "NONE";
     }
 }
 
@@ -29,16 +31,17 @@ inline const char* action_str(Action a) noexcept {
 // POD struct. No heap, no virtuals.
 
 struct Signal {
-    Action    action;         // BUY / SELL / NONE
-    double    price;          // Price at which the signal was generated
-    double    best_bid;       // Book state at signal time
+    Action    action;             // BUY / SELL / NONE
+    char      strategy_name[32];  // Name of the strategy (fixed size for SPSC safety)
+    double    price;              // Price at which the signal was generated
+    double    best_bid;           // Book state at signal time
     double    best_ask;
-    TimePoint feed_ts;        // Carried through from the originating Tick
-    TimePoint strategy_ts;    // Stamped by strategy thread when signal is produced
-    uint64_t  seq;            // Sequence number from originating tick
+    TimePoint feed_ts;            // Carried through from the originating Tick
+    TimePoint strategy_ts;        // Stamped by strategy thread when signal is produced
+    uint64_t  seq;                // Sequence number from originating tick
 
     void print() const noexcept {
-        std::printf("[Signal] %s @ %.2f\n", action_str(action), price);
+        std::printf("[Signal] [%s] %s @ %.2f\n", strategy_name, action_str(action), price);
     }
 };
 

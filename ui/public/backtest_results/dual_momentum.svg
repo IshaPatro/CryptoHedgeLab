@@ -1,0 +1,33 @@
+<svg viewBox="0 0 800 500" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100%" height="100%" fill="#0d1117" rx="8" />
+  <g stroke="#30363d" stroke-width="1">
+    <line x1="70" y1="60" x2="730" y2="60" />
+    <text x="60" y="64" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="end">260.8%</text>
+    <line x1="70" y1="155" x2="730" y2="155" />
+    <text x="60" y="159" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="end">171.0%</text>
+    <line x1="70" y1="250" x2="730" y2="250" />
+    <text x="60" y="254" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="end">81.2%</text>
+    <line x1="70" y1="345" x2="730" y2="345" />
+    <text x="60" y="349" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="end">-8.6%</text>
+    <line x1="70" y1="440" x2="730" y2="440" />
+    <text x="60" y="444" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="end">-98.4%</text>
+    <line x1="70" y1="60" x2="70" y2="440" />
+    <text x="70" y="460" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="middle">T0</text>
+    <line x1="235" y1="60" x2="235" y2="440" />
+    <text x="235" y="460" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="middle">T100</text>
+    <line x1="400" y1="60" x2="400" y2="440" />
+    <text x="400" y="460" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="middle">T200</text>
+    <line x1="565" y1="60" x2="565" y2="440" />
+    <text x="565" y="460" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="middle">T300</text>
+    <line x1="730" y1="60" x2="730" y2="440" />
+    <text x="730" y="460" fill="#8b949e" font-family="monospace" font-size="12" text-anchor="middle">T400</text>
+  </g>
+  <polyline fill="none" stroke="#238636" stroke-width="3" stroke-linejoin="round" points="70.0,335.9 83.2,291.9 96.4,308.0 109.6,335.9 122.8,335.1 136.0,348.6 149.2,383.3 162.4,418.0 175.6,402.8 188.8,396.0 202.0,393.5 215.2,405.3 228.4,404.5 241.6,384.1 254.8,405.3 268.0,390.1 281.2,347.8 294.4,368.1 307.6,388.4 320.8,400.2 334.0,427.3 347.2,440.0 360.4,406.1 373.6,399.4 386.8,383.3 400.0,355.4 413.2,346.9 426.4,368.1 439.6,397.7 452.8,371.4 466.0,401.1 479.2,362.1 492.4,323.2 505.6,285.1 518.8,264.0 532.0,291.0 545.2,263.1 558.4,217.4 571.6,252.1 584.8,210.6 598.0,181.0 611.2,179.3 624.4,132.8 637.6,87.1 650.8,76.1 664.0,110.8 677.2,104.9 690.4,94.7 703.6,60.0 716.8,69.3 730.0,64.2 " />
+  <rect x="590" y="70" width="140" height="50" fill="rgba(255,255,255,0.05)" rx="4" stroke="#30363d" />
+  <rect x="600" y="80" width="12" height="12" fill="#238636" rx="2" />
+  <text x="620" y="90" fill="#fff" font-family="monospace" font-size="12">Cum. PnL</text>
+  <text x="600" y="110" fill="#8b949e" font-family="monospace" font-size="11">Asset: BTC/USDT</text>
+  <text x="70" y="35" fill="#fff" font-family="monospace" font-size="18" font-weight="bold">STRATEGY: dual_momentum</text>
+  <rect x="580" y="15" width="180" height="30" rx="4" fill="rgba(35,134,54,0.2)" stroke="#238636" />
+  <text x="670" y="35" fill="#238636" font-family="monospace" font-size="16" font-weight="bold" text-anchor="middle">Final: 256.80%</text>
+</svg>

@@ -1,0 +1,13 @@
+{
+    "name": "synthetic_put",
+    "entry": {
+        "condition": "synthetic_put_entry"
+    },
+    "exit": {
+        "condition": "synthetic_put_exit"
+    },
+    "size": "0.05",
+    "hedge": {
+        "enabled": "false"
+    }
+}

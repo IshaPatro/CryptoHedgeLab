@@ -113,10 +113,13 @@ void BinanceWebSocket::on_ws_handshake(beast::error_code ec) {
     connected_ = true;
     std::printf("[Feed] ✓ Connected to Binance WebSocket\n");
 
-    // Subscribe to additional depth stream via Binance JSON API
+    // Subscribe to additional depth streams via Binance JSON API
     std::string subscribe_msg = R"({
         "method": "SUBSCRIBE",
-        "params": ["btcusdt@depth5@100ms"],
+        "params": [
+            "btcusdt@depth5@100ms",
+            "ethusdt@depth5@100ms"
+        ],
         "id": 1
     })";
 
@@ -127,7 +130,7 @@ void BinanceWebSocket::on_ws_handshake(beast::error_code ec) {
                 std::fprintf(stderr, "[Feed] Subscribe write failed: %s\n", ec.message().c_str());
                 return;
             }
-            std::printf("[Feed] Subscribed: btcusdt@trade + btcusdt@depth5@100ms\n");
+            std::printf("[Feed] Subscribed to multiplex streams (BTC/ETH Trade/Depth + Funding)\n");
             std::printf("[Feed] Listening for messages ...\n\n");
             do_read();
         }

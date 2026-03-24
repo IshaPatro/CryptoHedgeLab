@@ -26,13 +26,13 @@ using tcp = asio::ip::tcp;
 class WSSession : public std::enable_shared_from_this<WSSession> {
     websocket::stream<tcp::socket> ws_;
     std::string send_buffer_;
+    std::function<void(const std::string&)> on_cmd_;
 
 public:
-    explicit WSSession(tcp::socket socket) 
-        : ws_(std::move(socket)) {}
+    explicit WSSession(tcp::socket socket, std::function<void(const std::string&)> on_cmd) 
+        : ws_(std::move(socket)), on_cmd_(on_cmd) {}
 
     void start() {
-        // Accept the websocket handshake
         ws_.set_option(websocket::stream_base::timeout::suggested(beast::role_type::server));
         ws_.async_accept(
             beast::bind_front_handler(&WSSession::on_accept, shared_from_this())
@@ -40,9 +40,6 @@ public:
     }
 
     void send_async(const std::string& msg) {
-        // Simple async push (assumes no overlaps for this demo, or just drop if busy)
-        // In a rigorous server, you'd queue messages if async_write is already pending.
-        // For local UI 20Hz updates, this is mostly fine.
         send_buffer_ = msg;
         ws_.async_write(
             asio::buffer(send_buffer_),
@@ -54,9 +51,7 @@ private:
     void on_accept(beast::error_code ec) {
         if (ec) std::cerr << "[UI] Accept error: " << ec.message() << "\n";
         else std::cout << "[UI] Client connected to dashboard.\n";
-        
-        // We only care about sending. If the client closes, we rely on write failing.
-        do_read(); // Keep reading to detect close
+        do_read();
     }
 
     void do_read() {
@@ -64,14 +59,16 @@ private:
         ws_.async_read(
             *buffer,
             [self = shared_from_this(), buffer](beast::error_code ec, std::size_t) {
-                if (!ec) self->do_read();
+                if (!ec) {
+                    if (self->on_cmd_) {
+                        self->on_cmd_(beast::buffers_to_string(buffer->data()));
+                    }
+                    self->do_read();
+                }
             });
     }
 
-    void on_write(beast::error_code /*ec*/, std::size_t /*bytes_transferred*/) {
-        // If write fails (e.g. client disconnects), the read loop will also fail
-        // and tear down the session eventually.
-    }
+    void on_write(beast::error_code /*ec*/, std::size_t /*bytes_transferred*/) {}
 };
 
 // ─── WebSocket Broadcaster ─────────────────────────────────────────────────
@@ -88,11 +85,13 @@ class UIBroadcaster {
 
     std::thread worker_thread_;
     std::atomic<bool> running_{false};
+    std::function<void(const std::string&)> on_cmd_;
 
 public:
-    explicit UIBroadcaster(UIState& ui_state, uint16_t port = 8080)
+    explicit UIBroadcaster(UIState& ui_state, uint16_t port = 8080, std::function<void(const std::string&)> on_cmd = nullptr)
         : ui_state_(ui_state),
-          acceptor_(ioc_, tcp::endpoint(tcp::v4(), port))
+          acceptor_(ioc_, tcp::endpoint(tcp::v4(), port)),
+          on_cmd_(on_cmd)
     {
     }
 
@@ -134,7 +133,7 @@ private:
         acceptor_.async_accept(
             [this](beast::error_code ec, tcp::socket socket) {
                 if (!ec) {
-                    auto session = std::make_shared<WSSession>(std::move(socket));
+                    auto session = std::make_shared<WSSession>(std::move(socket), on_cmd_);
                     {
                         std::lock_guard<std::mutex> lock(sessions_mutex_);
                         sessions_.push_back(session);
@@ -208,9 +207,10 @@ private:
 
         // Format Big JSON
         // Using snprintf to avoid heavy dependencies like jsoncpp or rapidjson
-        char buf[1024];
+        char buf[2048];
         std::snprintf(buf, sizeof(buf),
             "{"
+            "\"strategy_name\":\"%s\","
             "\"price\":%.2f,"
             "\"bid\":%.2f,"
             "\"ask\":%.2f,"
@@ -219,6 +219,7 @@ private:
             "\"latency\":{\"feed_to_strategy\":%.1f,\"strategy_to_execution\":%.1f,\"end_to_end\":%.1f},"
             "\"trades\":%s"
             "}",
+            ui_state_.strategy_name,
             p, b, a, 
             qty, avg_p, 
             pnl_r, pnl_u, 

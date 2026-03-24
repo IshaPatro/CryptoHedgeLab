@@ -1,0 +1,13 @@
+{
+    "name": "margin_short",
+    "entry": {
+        "condition": "margin_short_entry"
+    },
+    "exit": {
+        "condition": "margin_short_exit"
+    },
+    "size": "0.1",
+    "hedge": {
+        "enabled": "false"
+    }
+}

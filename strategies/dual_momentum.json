@@ -1,0 +1,13 @@
+{
+    "name": "dual_momentum",
+    "entry": {
+        "condition": "dual_momentum_entry"
+    },
+    "exit": {
+        "condition": "dual_momentum_exit"
+    },
+    "size": "0.05",
+    "hedge": {
+        "enabled": "false"
+    }
+}

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(CryptoHedgeLab VERSION 2.0.0 LANGUAGES CXX)
+project(CryptoHedgeLab VERSION 2.0.0 LANGUAGES CXX C)
 
 # ─── C++ Standard ───────────────────────────────────────────────────────────
 set(CMAKE_CXX_STANDARD 20)
@@ -37,15 +37,21 @@ endif()
 # Threads (pthread — required for std::thread, std::atomic)
 find_package(Threads REQUIRED)
 
-# ─── Module 2: Pipeline Core ───────────────────────────────────────────────
+# ─── Module 5: kdb+ Backtesting & Hedging ──────────────────────────────────
 add_executable(cryptohedgelab_feed
     main.cpp
     core/feed_handler/binance_ws.cpp
+    kdb/c/c.o
 )
 
 target_include_directories(cryptohedgelab_feed PRIVATE
     ${CMAKE_SOURCE_DIR}                # For #include "core/..."
+    ${CMAKE_SOURCE_DIR}/kdb/c          # For #include "k.h"
     ${Boost_INCLUDE_DIRS}
+)
+
+target_compile_definitions(cryptohedgelab_feed PRIVATE
+    KXVER=3                            # Required by kdb+ C API
 )
 
 target_link_libraries(cryptohedgelab_feed PRIVATE
@@ -65,9 +71,9 @@ endif()
 
 # ─── Build Summary ──────────────────────────────────────────────────────────
 message(STATUS "")
-message(STATUS "── CryptoHedgeLab Module 2: Pipeline Core ──")
+message(STATUS "── CryptoHedgeLab Module 5: kdb+, Backtesting & Hedging ──")
 message(STATUS "  Target: cryptohedgelab_feed")
 message(STATUS "  Standard: C++${CMAKE_CXX_STANDARD}")
 message(STATUS "  Build: ${CMAKE_BUILD_TYPE}")
-message(STATUS "  Threading: SPSC lock-free queues + std::thread")
+message(STATUS "  kdb+ API: Native compilation (c.c + k.h)")
 message(STATUS "")

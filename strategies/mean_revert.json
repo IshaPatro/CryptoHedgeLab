@@ -1,0 +1,16 @@
+{
+  "name": "mean_revert",
+  "entry": {
+    "condition": "price_below_ema",
+    "param": 50
+  },
+  "exit": {
+    "condition": "price_above_ema",
+    "param": 50
+  },
+  "size": 0.001,
+  "hedge": {
+    "enabled": true,
+    "ratio": 1.0
+  }
+}

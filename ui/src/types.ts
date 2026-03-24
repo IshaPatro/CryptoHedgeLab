@@ -22,6 +22,7 @@ export interface Trade {
 }
 
 export interface Metrics {
+  strategy_name?: string;
   price: number;
   bid: number;
   ask: number;

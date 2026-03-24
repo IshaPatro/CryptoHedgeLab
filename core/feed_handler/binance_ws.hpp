@@ -69,8 +69,8 @@ private:
     // ─── Configuration ─────────────────────────────────────────────────
     static constexpr const char* HOST   = "data-stream.binance.vision";
     static constexpr const char* PORT   = "9443";
-    // Use raw stream endpoint; subscribe to combined streams dynamically
-    static constexpr const char* TARGET = "/ws/btcusdt@trade";
+    // Use multiplex stream endpoint for multi-asset strategies
+    static constexpr const char* TARGET = "/stream?streams=btcusdt@trade/ethusdt@trade/btcusdt@markPrice@1s";
     static constexpr std::size_t BUFFER_SIZE = 65536;  // 64 KB pre-allocated
 
     // ─── Members ───────────────────────────────────────────────────────

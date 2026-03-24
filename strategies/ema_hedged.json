@@ -1,0 +1,16 @@
+{
+  "name": "ema_hedged",
+  "entry": {
+    "condition": "price_above_ema",
+    "param": 20
+  },
+  "exit": {
+    "condition": "price_below_ema",
+    "param": 20
+  },
+  "size": 0.001,
+  "hedge": {
+    "enabled": true,
+    "ratio": 0.7
+  }
+}
