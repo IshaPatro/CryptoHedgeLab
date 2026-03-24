@@ -159,9 +159,8 @@ private:
 
     void broadcast_snapshot() {
         std::lock_guard<std::mutex> lock(sessions_mutex_);
-        if (sessions_.empty()) return; // Nothing to do
+        if (sessions_.empty()) return;
 
-        // Clean up dead sessions
         sessions_.erase(
             std::remove_if(sessions_.begin(), sessions_.end(),
                 [](const std::weak_ptr<WSSession>& wp) { return wp.expired(); }),
@@ -169,62 +168,62 @@ private:
 
         if (sessions_.empty()) return;
 
-        // Take snapshot (atomic relaxed loads)
+        // 1. Market Data
         double p = ui_state_.price.load(std::memory_order_relaxed);
         double b = ui_state_.best_bid.load(std::memory_order_relaxed);
         double a = ui_state_.best_ask.load(std::memory_order_relaxed);
         
-        double qty = ui_state_.pos_qty.load(std::memory_order_relaxed);
-        double avg_p = ui_state_.pos_avg_price.load(std::memory_order_relaxed);
-        
-        double pnl_r = ui_state_.pnl_realized.load(std::memory_order_relaxed);
-        double pnl_u = ui_state_.pnl_unrealized.load(std::memory_order_relaxed);
-        
+        // 2. Latencies
         double l_fs = ui_state_.lat_feed_strat.load(std::memory_order_relaxed);
         double l_se = ui_state_.lat_strat_exec.load(std::memory_order_relaxed);
         double l_tot = ui_state_.lat_total.load(std::memory_order_relaxed);
 
-        // Trades
+        // 3. Per-strategy metrics
+        const char* names[] = {
+            "momentum", "funding_arbitrage", "pairs_trading", "dual_momentum",
+            "margin_short", "vol_straddle", "perp_swap_hedge", 
+            "inverse_perp_hedge", "synthetic_put"
+        };
+        std::string strats_json = "[";
+        for (size_t i = 0; i < UIState::MAX_STRATEGIES; ++i) {
+            auto& m = ui_state_.strategy_metrics[i];
+            double qty = m.pos_qty.load(std::memory_order_relaxed);
+            double avg = m.pos_avg_price.load(std::memory_order_relaxed);
+            double pr  = m.pnl_realized.load(std::memory_order_relaxed);
+            double pu  = m.pnl_unrealized.load(std::memory_order_relaxed);
+            
+            char s_buf[256];
+            std::snprintf(s_buf, sizeof(s_buf),
+                R"({"name":"%s","qty":%.6f,"avg":%.2f,"pnl_r":%.4f,"pnl_u":%.4f})",
+                names[i], qty, avg, pr, pu);
+            strats_json += s_buf;
+            if (i < UIState::MAX_STRATEGIES - 1) strats_json += ",";
+        }
+        strats_json += "]";
+
+        // 4. Recent Trades
         std::string trades_json = "[";
         size_t write_idx = ui_state_.trade_idx.load(std::memory_order_acquire);
-        
-        // Get the last min(N, MAX) trades in reverse chronological
         size_t count = std::min(write_idx, UIState::MAX_UI_TRADES);
         for (size_t i = 0; i < count; ++i) {
             size_t actual_idx = (write_idx - 1 - i) % UIState::MAX_UI_TRADES;
             const auto& t = ui_state_.trades[actual_idx];
-            
-            char trade_buf[128];
+            char trade_buf[160];
             std::snprintf(trade_buf, sizeof(trade_buf),
-                R"({"side":"%s", "price":%.2f, "qty":%.6f, "seq":%llu})",
+                R"({"side":"%s","price":%.2f,"qty":%.6f,"seq":%llu,"strategy_name":"%s"})",
                 action_str(t.side), t.price, t.qty, 
-                static_cast<unsigned long long>(t.seq));
-                
+                static_cast<unsigned long long>(t.seq),
+                (t.strategy_id < UIState::MAX_STRATEGIES) ? names[t.strategy_id] : "unknown");
             trades_json += trade_buf;
             if (i < count - 1) trades_json += ",";
         }
         trades_json += "]";
 
-        // Format Big JSON
-        // Using snprintf to avoid heavy dependencies like jsoncpp or rapidjson
-        char buf[2048];
+        // 5. Consolidated JSON
+        char buf[4096];
         std::snprintf(buf, sizeof(buf),
-            "{"
-            "\"strategy_name\":\"%s\","
-            "\"price\":%.2f,"
-            "\"bid\":%.2f,"
-            "\"ask\":%.2f,"
-            "\"position\":{\"qty\":%.6f,\"avg_price\":%.2f},"
-            "\"pnl\":{\"realized\":%.4f,\"unrealized\":%.4f},"
-            "\"latency\":{\"feed_to_strategy\":%.1f,\"strategy_to_execution\":%.1f,\"end_to_end\":%.1f},"
-            "\"trades\":%s"
-            "}",
-            ui_state_.strategy_name,
-            p, b, a, 
-            qty, avg_p, 
-            pnl_r, pnl_u, 
-            l_fs, l_se, l_tot,
-            trades_json.c_str()
+            R"({"price":%.2f,"bid":%.2f,"ask":%.2f,"latency":{"fs":%.1f,"se":%.1f,"tot":%.1f},"strategies":%s,"trades":%s})",
+            p, b, a, l_fs, l_se, l_tot, strats_json.c_str(), trades_json.c_str()
         );
 
         std::string msg(buf);

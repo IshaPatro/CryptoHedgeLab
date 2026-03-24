@@ -9,9 +9,9 @@ export interface PnL {
 }
 
 export interface Latency {
-  feed_to_strategy: number;
-  strategy_to_execution: number;
-  end_to_end: number;
+  fs: number; // feed_to_strategy
+  se: number; // strategy_to_execution
+  tot: number; // total
 }
 
 export interface Trade {
@@ -19,15 +19,22 @@ export interface Trade {
   price: number;
   qty: number;
   seq: number;
+  strategy_name?: string;
+}
+
+export interface StrategySummary {
+  name: string;
+  qty: number;
+  avg: number;
+  pnl_r: number;
+  pnl_u: number;
 }
 
 export interface Metrics {
-  strategy_name?: string;
   price: number;
   bid: number;
   ask: number;
-  position: Position;
-  pnl: PnL;
   latency: Latency;
+  strategies: StrategySummary[];
   trades: Trade[];
 }

@@ -19,23 +19,24 @@ struct UITrade {
     double price;
     double qty;
     uint64_t seq;
+    size_t strategy_id;
+};
+
+struct StrategyMetrics {
+    std::atomic<double> pos_qty{0.0};
+    std::atomic<double> pos_avg_price{0.0};
+    std::atomic<double> pnl_realized{0.0};
+    std::atomic<double> pnl_unrealized{0.0};
 };
 
 struct UIState {
-    char strategy_name[32]{0};
+    static constexpr size_t MAX_STRATEGIES = 9;
+    StrategyMetrics strategy_metrics[MAX_STRATEGIES]{};
 
     // ─── Market ───
     std::atomic<double> price{0.0};
     std::atomic<double> best_bid{0.0};
     std::atomic<double> best_ask{0.0};
-
-    // ─── Position ───
-    std::atomic<double> pos_qty{0.0};
-    std::atomic<double> pos_avg_price{0.0};
-
-    // ─── PnL ─────
-    std::atomic<double> pnl_realized{0.0};
-    std::atomic<double> pnl_unrealized{0.0};
 
     // ─── Latency (in microseconds) ───
     std::atomic<double> lat_feed_strat{0.0};
@@ -48,9 +49,9 @@ struct UIState {
     std::atomic<size_t> trade_idx{0}; // write index
 
     // The execution thread calls this to record a fill
-    void add_trade(Action side, double price, double qty, uint64_t seq) noexcept {
+    void add_trade(size_t strat_id, Action side, double price, double qty, uint64_t seq) noexcept {
         size_t idx = trade_idx.load(std::memory_order_relaxed) % MAX_UI_TRADES;
-        trades[idx] = {side, price, qty, seq};
+        trades[idx] = {side, price, qty, seq, strat_id};
         trade_idx.store(idx + 1, std::memory_order_release);
     }
 };

@@ -2,11 +2,10 @@
 // CryptoHedgeLab — Module 6: Quant Strategy Lab
 // ─────────────────────────────────────────────────────────────────────────────
 // CLI:
-//   --mode live                              Live WebSocket feed
-//   --mode backtest --start N --end N        Single-strategy backtest
-//   --run strategy.json --mode backtest      Load + run one strategy
-//   --compare s1.json s2.json s3.json        Multi-strategy comparison backtest
-//   --hedge on  --speed N                    Optional flags
+//   --mode live                              Live WebSocket feed from Binance
+//   --mode replay --start N --end N          Replay historical data from kdb+
+//   --speed N                                Replay playback speed multiplier
+//   --hedge on/off                           Enable/Disable auto-hedging
 
 #include "core/feed_handler/binance_ws.hpp"
 #include "core/feed_handler/message_parser.hpp"
@@ -22,12 +21,8 @@
 #include "core/ui/ws_server.hpp"
 #include "core/kdb/kdb_writer.hpp"
 #include "core/kdb/replay_engine.hpp"
-// Module 6 — Quant Strategy Lab
 #include "core/quant/strategy_def.hpp"
 #include "core/quant/strategy_parser.hpp"
-#include "core/quant/strategy_instance.hpp"
-#include "core/quant/report_generator.hpp"
-#include "core/quant/backtest_runner.hpp"
 
 #include <boost/asio/io_context.hpp>
 #include <boost/asio/signal_set.hpp>
@@ -42,8 +37,6 @@
 // ─── CLI Config ──────────────────────────────────────────────────────────────
 struct Config {
     std::string mode        = "live";
-    std::string run_file    = "";
-    std::vector<std::string> compare_files;
     uint64_t    start       = 0;
     uint64_t    end         = std::numeric_limits<uint64_t>::max();
     double      speed       = 0.0;  // 0 = max throughput
@@ -52,85 +45,20 @@ struct Config {
 
 Config parse_cli(int argc, char** argv) {
     Config cfg;
-    bool in_compare    = false;
-    bool mode_set_by_run = false;  // --run/--compare take priority over --mode
     for (int i = 1; i < argc; ++i) {
         std::string arg = argv[i];
         if (arg == "--mode" && i+1 < argc) {
-            if (!mode_set_by_run) cfg.mode = argv[++i];
-            else ++i; // consume arg but ignore it
-            in_compare = false;
+            cfg.mode = argv[++i];
         }
-        else if (arg == "--run" && i+1 < argc) {
-            cfg.run_file     = argv[++i];
-            cfg.mode         = "run";
-            mode_set_by_run  = true;
-            in_compare       = false;
-        }
-        else if (arg == "--compare") {
-            cfg.mode         = "compare";
-            mode_set_by_run  = true;
-            in_compare       = true;
-        }
-        else if (arg == "--start" && i+1 < argc){ cfg.start = std::stoull(argv[++i]); in_compare = false; }
-        else if (arg == "--end"   && i+1 < argc){ cfg.end   = std::stoull(argv[++i]); in_compare = false; }
-        else if (arg == "--speed" && i+1 < argc){ cfg.speed = std::stod(argv[++i]);   in_compare = false; }
+        else if (arg == "--start" && i+1 < argc){ cfg.start = std::stoull(argv[++i]); }
+        else if (arg == "--end"   && i+1 < argc){ cfg.end   = std::stoull(argv[++i]); }
+        else if (arg == "--speed" && i+1 < argc){ cfg.speed = std::stod(argv[++i]);   }
         else if (arg == "--hedge" && i+1 < argc){
             std::string h = argv[++i];
             cfg.hedge = (h == "on" || h == "true" || h == "1");
-            in_compare = false;
-        }
-        else if (in_compare && arg[0] != '-') {
-            cfg.compare_files.push_back(arg);
         }
     }
     return cfg;
-}
-
-// ─── Quant Lab entrypoint (--run or --compare) ──────────────────────────────
-static int run_quant_lab(const Config& cfg) {
-    std::printf("╔══════════════════════════════════════════════════════════╗\n");
-    std::printf("║        CryptoHedgeLab — Quant Strategy Lab v6.0         ║\n");
-    std::printf("╚══════════════════════════════════════════════════════════╝\n\n");
-
-    chl::BacktestRunner runner;
-
-    if (cfg.mode == "run") {
-        // Single strategy
-        try {
-            auto def = chl::StrategyParser::parse_file(cfg.run_file);
-            std::printf("[QuantLab] Loaded strategy: %s\n", def.name.c_str());
-            std::printf("  Entry:  %s\n", chl::condition_name(def.entry_cond));
-            std::printf("  Exit:   %s\n", chl::condition_name(def.exit_cond));
-            std::printf("  Size:   %.4f BTC\n", def.size_btc);
-            std::printf("  Hedge:  %s (ratio %.2f)\n\n",
-                        def.hedge_enabled ? "ON" : "OFF", def.hedge_ratio);
-            runner.add_strategy(def);
-        } catch (const std::exception& e) {
-            std::fprintf(stderr, "[QuantLab] ERROR: %s\n", e.what());
-            return 1;
-        }
-    } else {
-        // Multi-strategy comparison
-        if (cfg.compare_files.empty()) {
-            std::fprintf(stderr, "[QuantLab] ERROR: No strategy files specified for --compare.\n");
-            return 1;
-        }
-        for (const auto& path : cfg.compare_files) {
-            try {
-                auto def = chl::StrategyParser::parse_file(path);
-                std::printf("[QuantLab] Loaded: %s (%s)\n", def.name.c_str(), path.c_str());
-                runner.add_strategy(def);
-            } catch (const std::exception& e) {
-                std::fprintf(stderr, "[QuantLab] WARNING: Skipping %s: %s\n", path.c_str(), e.what());
-            }
-        }
-        std::printf("\n");
-    }
-
-    runner.run(cfg.start, cfg.end, cfg.speed);
-    runner.print_results();
-    return 0;
 }
 
 // ─── Live Pipeline entrypoint ────────────────────────────────────────────────
@@ -163,9 +91,6 @@ static int run_live_pipeline(const Config& cfg) {
         }
     }
     
-    // ── Static Backtest Reports for UI ───────────────
-    chl::ReportGenerator::generate_all(strats);
-    
     if (strats.empty()) {
         std::fprintf(stderr, "[Main] ERROR: No strategies loaded.\n");
         return 1;
@@ -186,7 +111,6 @@ static int run_live_pipeline(const Config& cfg) {
     uint32_t tick_seq = 0;
 
     auto ui_state = std::make_unique<chl::UIState>();
-    std::snprintf(ui_state->strategy_name, sizeof(ui_state->strategy_name), "%s", strats[0].name.c_str());
     
     auto on_cmd = [&strats, &active_idx](const std::string& cmd_json) {
         auto cmd = chl::detail::extract_string(cmd_json, "cmd");
@@ -304,14 +228,17 @@ static int run_live_pipeline(const Config& cfg) {
     if (cfg.mode == "live") {
         ws.connect();
         ioc.run();
-    } else {
-        std::printf("[Main] Starting Backtest Replay Engine...\n");
+    } else if (cfg.mode == "replay") {
+        std::printf("[Main] Starting Historical Replay Engine...\n");
         replay_thread = std::thread([&]() {
             replay.run(cfg.start, cfg.end, cfg.speed);
             running.store(false, std::memory_order_release);
             ioc.stop();
         });
         ioc.run();
+    } else {
+        std::fprintf(stderr, "[Main] ERROR: Unknown mode '%s'. Use 'live' or 'replay'.\n", cfg.mode.c_str());
+        return 1;
     }
 
     std::printf("[Main] Waiting for worker threads...\n");
@@ -327,9 +254,5 @@ static int run_live_pipeline(const Config& cfg) {
 // ─── Entry Point ──────────────────────────────────────────────────────────────
 int main(int argc, char** argv) {
     Config cfg = parse_cli(argc, argv);
-
-    if (cfg.mode == "run" || cfg.mode == "compare")
-        return run_quant_lab(cfg);
-    else
-        return run_live_pipeline(cfg);
+    return run_live_pipeline(cfg);
 }
