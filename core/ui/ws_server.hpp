@@ -182,7 +182,7 @@ private:
         const char* names[] = {
             "momentum", "funding_arbitrage", "pairs_trading", "dual_momentum",
             "margin_short", "vol_straddle", "perp_swap_hedge", 
-            "inverse_perp_hedge", "synthetic_put"
+            "inverse_perp_hedge", "trend_vol_filter"
         };
         std::string strats_json = "[";
         for (size_t i = 0; i < UIState::MAX_STRATEGIES; ++i) {

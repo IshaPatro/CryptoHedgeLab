@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import type { Metrics } from './types';
-import { Activity, Clock, ArrowRightLeft, Beaker, BarChart2, X } from 'lucide-react';
+import { Clock, ArrowRightLeft, Beaker, BarChart2, X, TrendingUp } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import logo from './assets/logo.png';
 
-/* ═══════════════════════════════════════════════════════
+/* ───────────────────────────────────────────────────────
    Strategy/Asset Metadata
-   ═══════════════════════════════════════════════════════ */
+   ─────────────────────────────────────────────────────── */
 interface StrategyMeta {
   asset: string;
   instType: string;
@@ -21,7 +22,7 @@ const STRATEGY_META: Record<string, StrategyMeta> = {
   vol_straddle:          { asset: 'ETH/USDT',    instType: 'SPOT',   legs: 'Vol expansion breakout on ETH' },
   perp_swap_hedge:       { asset: 'BTC/USDT',    instType: 'PERP',   legs: 'Delta-neutral funding rate harvest' },
   inverse_perp_hedge:    { asset: 'BTC-INV',     instType: 'PERP',   legs: 'BTC long + inverse short hedge' },
-  synthetic_put:         { asset: 'BTC/USDT',    instType: 'SPOT',   legs: 'Dynamic delta hedge protective put' },
+  trend_vol_filter:      { asset: 'BTC/USDT',    instType: 'SPOT',   legs: 'EMA Rank + Vol Spike Exit (Defensive)' },
 };
 
 const PERFORMANCE_STATS: Record<string, any> = {
@@ -33,48 +34,66 @@ const PERFORMANCE_STATS: Record<string, any> = {
   vol_straddle:       { roi: 19.56,  cagr: 2.91,  sharpe: 0.45, max_dd: -15.67, win_rate: 50.00, trades: 152 },
   perp_swap_hedge:    { roi: 27.13,  cagr: 3.93,  sharpe: 9.57, max_dd: -0.56,  win_rate: 78.05, trades: 164 },
   inverse_perp_hedge: { roi: 1178.63,cagr: 50.56, sharpe: 0.94, max_dd: -77.88, win_rate: 43.47, trades: 352 },
-  synthetic_put:      { roi: 4333.66,cagr: 83.83, sharpe: 1.31, max_dd: -72.60, win_rate: 52.25, trades: 289 },
+  trend_vol_filter:   { roi: 35.64,  cagr: 9.89,  sharpe: 0.61, max_dd: -23.54, win_rate: 38.92, trades: 334 },
 };
 
 const COLORS = [
   '#3b82f6', '#10b981', '#ef4444', '#f59e0b', '#8b5cf6', 
-  '#ec4899', '#06b6d4', '#f97316', '#a855f7'
+  '#ec4899', '#06b6d4', '#f97316', '#006400'
 ];
+
+function PriceSparkline({ data, height = 60 }: { data: any[], height?: number }) {
+  return (
+    <div style={{ width: '100%', height: `${height}px`, marginTop: '8px' }}>
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart data={data}>
+          <Line type="monotone" dataKey="price" stroke="var(--accent-color)" strokeWidth={2} dot={false} isAnimationActive={false} />
+          <YAxis hide domain={['auto', 'auto']} />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
 
 function OrderBook({ bid, ask }: { bid: number, ask: number }) {
   const [spread, setSpread] = useState(0);
   useEffect(() => {
     if (bid > 0 && ask > 0) setSpread(ask - bid);
+    else setSpread(0);
   }, [bid, ask]);
 
   const generateLevels = (base: number, step: number, count: number, isAsk: boolean) => {
+    if (base <= 0) return [];
     return Array.from({ length: count }).map((_, i) => {
       const p = isAsk ? base + (i * step) : base - (i * step);
       const q = Math.random() * 0.5 + 0.1;
       return { price: p, qty: q };
-    }).sort((a, b) => b.price - a.price); // Both lists show descending price
+    }).sort((a, b) => b.price - a.price);
   };
 
-  const asks = useMemo(() => generateLevels(ask, 0.5, 5, true), [ask]);
-  const bids = useMemo(() => generateLevels(bid, 0.5, 5, false), [bid]);
+  const asks = useMemo(() => generateLevels(ask, 0.0001, 5, true), [ask]);
+  const bids = useMemo(() => generateLevels(bid, 0.0001, 5, false), [bid]);
 
   return (
-    <div className="glass-panel" style={{ padding: '1rem', height: '100%', boxSizing: 'border-box' }}>
-      <div className="panel-title"><Activity size={14} /> ORDERBOOK (BTC/USDT)</div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+    <div className="glass-panel" style={{ padding: '0.75rem', height: '100%', boxSizing: 'border-box' }}>
+      <div className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.75rem' }}>
+        <img src={logo} alt="L" style={{ width: '14px', height: '14px' }} />
+        ORDERBOOK (BTC/USDT)
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1px' }}>
         {asks.map((a, i) => (
-          <div key={i} className="orderbook-row ask">
-            <span>{a.price.toFixed(1)}</span>
-            <span>{a.qty.toFixed(3)}</span>
+          <div key={i} className="orderbook-row ask" style={{ fontSize: '0.7rem' }}>
+            <span>{a.price.toFixed(5)}</span>
+            <span>{a.qty.toFixed(6)}</span>
           </div>
         ))}
-        <div className="orderbook-spread" style={{ fontWeight: 700, color: 'var(--accent-color)' }}>
-          Spread: {spread.toFixed(1)} ({ask > 0 ? ((spread / ask) * 100).toFixed(3) : 0}%)
+        <div className="orderbook-spread" style={{ fontWeight: 700, color: 'var(--accent-color)', fontSize: '0.75rem', textAlign: 'center', margin: '2px 0' }}>
+          Spread: {spread.toFixed(5)} ({ask > 0 ? ((spread / ask) * 100).toFixed(6) : 0}%)
         </div>
         {bids.map((b, i) => (
-          <div key={i} className="orderbook-row bid">
-            <span>{b.price.toFixed(1)}</span>
-            <span>{b.qty.toFixed(3)}</span>
+          <div key={i} className="orderbook-row bid" style={{ fontSize: '0.7rem' }}>
+            <span>{b.price.toFixed(5)}</span>
+            <span>{b.qty.toFixed(6)}</span>
           </div>
         ))}
       </div>
@@ -87,6 +106,7 @@ function App() {
   const [metrics, setMetrics]     = useState<Metrics | null>(null);
   const [connected, setConnected] = useState(false);
   const [pnlHistory, setPnlHistory] = useState<any[]>([]);
+  const [priceHistory, setPriceHistory] = useState<any[]>([]);
   const lastFillCount = useRef(-1);
   const wsRef = useRef<WebSocket | null>(null);
   const [modalStrategy, setModalStrategy] = useState<any>(null);
@@ -100,6 +120,13 @@ function App() {
           const data: Metrics = JSON.parse(event.data);
           setMetrics(data);
           
+          if (data.price > 0) {
+            setPriceHistory(prev => {
+              const next = [...prev, { price: data.price }];
+              return next.length > 100 ? next.slice(next.length - 100) : next;
+            });
+          }
+
           const currentFills = data.trades?.length ?? 0;
           if (currentFills !== lastFillCount.current) {
             lastFillCount.current = currentFills;
@@ -126,7 +153,7 @@ function App() {
 
   const renderTabs = () => (
     <div style={{ display: 'flex', gap: '1rem', borderBottom: '1px solid var(--border-color)', margin: 0, padding: 0 }}>
-      {([['live', 'Real-time Dashboard', Activity], ['lab', 'Quant Strategy Lab', Beaker]] as const).map(([key, label, Icon]) => (
+      {([['live', 'Real-time Dashboard', logo], ['lab', 'Quant Strategy Lab', Beaker]] as const).map(([key, label, IconOrLogo]) => (
         <button key={key}
           onClick={() => setActiveTab(key as 'live' | 'lab')}
           style={{
@@ -137,7 +164,8 @@ function App() {
             borderBottom: activeTab === key ? '2px solid var(--accent-color)' : '2px solid transparent',
             padding: '0.4rem 0.75rem',
           }}>
-          <Icon size={16} /> {label}
+          {typeof IconOrLogo === 'string' ? <img src={IconOrLogo} style={{ width: '16px', height: '16px' }} /> : <IconOrLogo size={16} />}
+          {label}
         </button>
       ))}
     </div>
@@ -156,8 +184,14 @@ function App() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', paddingBottom: '2rem' }}>
         <main style={{ display: 'grid', gridTemplateColumns: 'minmax(250px, 1fr) 2fr 1.2fr', gap: '1.5rem' }}>
           
-          <div style={{ minHeight: '350px' }}>
-            <OrderBook bid={bid} ask={ask} />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ flex: 1 }}>
+              <OrderBook bid={bid} ask={ask} />
+            </div>
+            <div className="glass-panel" style={{ padding: '0.75rem' }}>
+              <div className="panel-title" style={{ fontSize: '0.7rem' }}><TrendingUp size={12} /> BTC SPOT SPARKLINE</div>
+              <PriceSparkline data={priceHistory} height={80} />
+            </div>
           </div>
 
           <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', minHeight: '350px' }}>
@@ -189,7 +223,10 @@ function App() {
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
             <div className="glass-panel" style={{ padding: '0.75rem' }}>
-              <div className="panel-title" style={{ fontSize: '0.75rem' }}><Activity size={14} /> LIVE PERFORMANCE</div>
+              <div className="panel-title" style={{ fontSize: '0.75rem' }}>
+                <img src={logo} alt="L" style={{ width: '12px', height: '12px' }} />
+                LIVE PERFORMANCE
+              </div>
               <table className="trades-table" style={{ width: '100%', fontSize: '0.75rem' }}>
                 <thead>
                   <tr>
@@ -235,35 +272,37 @@ function App() {
           </div>
         </main>
 
-        <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column' }}>
-          <div className="panel-title"><ArrowRightLeft size={14} /> GLOBAL EXECUTION LOG</div>
-          <table className="trades-table" style={{ width: '100%', fontSize: '0.8rem' }}>
-            <thead>
-              <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
-                <th style={{ textAlign: 'left', padding: '8px' }}>Seq</th>
-                <th style={{ textAlign: 'left', padding: '8px' }}>Strategy</th>
-                <th style={{ textAlign: 'left', padding: '8px' }}>Side</th>
-                <th style={{ textAlign: 'right', padding: '8px' }}>Price</th>
-                <th style={{ textAlign: 'right', padding: '8px' }}>Qty (BTC)</th>
-              </tr>
-            </thead>
-            <tbody>
-              {trades.map((t, i) => (
-                <tr key={`${t.seq}-${i}`} className={i === 0 ? 'row-flash' : ''} style={{ borderBottom: '1px solid var(--border-color)' }}>
-                  <td style={{ color: 'var(--text-muted)', padding: '8px' }}>{t.seq}</td>
-                  <td style={{ fontWeight: 600, padding: '8px' }}>{t.strategy_name?.toUpperCase().replace(/_/g, ' ')}</td>
-                  <td className={t.side === 'BUY' ? 'text-up' : 'text-down'} style={{ fontWeight: 'bold', padding: '8px' }}>{t.side}</td>
-                  <td style={{ fontFamily: 'monospace', textAlign: 'right', padding: '8px' }}>${t.price.toFixed(2)}</td>
-                  <td style={{ fontFamily: 'monospace', textAlign: 'right', padding: '8px' }}>{t.qty.toFixed(6)}</td>
+        <div style={{ display: 'grid' }}>
+          <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column' }}>
+            <div className="panel-title"><ArrowRightLeft size={14} /> GLOBAL EXECUTION LOG</div>
+            <table className="trades-table" style={{ width: '100%', fontSize: '0.8rem' }}>
+              <thead>
+                <tr style={{ borderBottom: '2px solid var(--border-color)' }}>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Seq</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Strategy</th>
+                  <th style={{ textAlign: 'left', padding: '8px' }}>Side</th>
+                  <th style={{ textAlign: 'right', padding: '8px' }}>Price</th>
+                  <th style={{ textAlign: 'right', padding: '8px' }}>Qty (BTC)</th>
                 </tr>
-              ))}
-              {trades.length === 0 && (
-                <tr>
-                  <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No live executions recorded.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {trades.map((t, i) => (
+                  <tr key={`${t.seq}-${i}`} className={i === 0 ? 'row-flash' : ''} style={{ borderBottom: '1px solid var(--border-color)' }}>
+                    <td style={{ color: 'var(--text-muted)', padding: '8px' }}>{t.seq}</td>
+                    <td style={{ fontWeight: 600, padding: '8px' }}>{t.strategy_name?.toUpperCase().replace(/_/g, ' ')}</td>
+                    <td className={t.side === 'BUY' ? 'text-up' : 'text-down'} style={{ fontWeight: 'bold', padding: '8px' }}>{t.side}</td>
+                    <td style={{ fontFamily: 'monospace', textAlign: 'right', padding: '8px' }}>${t.price.toFixed(5)}</td>
+                    <td style={{ fontFamily: 'monospace', textAlign: 'right', padding: '8px' }}>{t.qty.toFixed(6)}</td>
+                  </tr>
+                ))}
+                {trades.length === 0 && (
+                  <tr>
+                    <td colSpan={5} style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-muted)' }}>No live executions recorded.</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     );
@@ -357,7 +396,7 @@ function App() {
     <div className="dashboard-container" style={{ padding: '1rem 1.5rem', display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden' }}>
       <header className="top-bar" style={{ flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <Activity color="var(--accent-color)" size={24} />
+          <img src={logo} alt="Logo" style={{ width: '32px', height: '32px' }} />
           <h2 style={{ margin: 0, fontSize: '1.2rem' }}>CryptoHedgeLab</h2>
         </div>
         <div className={`status-indicator ${connected ? 'status-connected' : 'status-disconnected'}`}>

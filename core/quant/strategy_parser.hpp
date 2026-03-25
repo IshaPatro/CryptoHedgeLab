@@ -97,8 +97,8 @@ inline ConditionType parse_condition(const std::string& s) {
     if (s == "perp_swap_exit")      return ConditionType::PERP_SWAP_EXIT;
     if (s == "inverse_perp_entry")  return ConditionType::INVERSE_PERP_ENTRY;
     if (s == "inverse_perp_exit")   return ConditionType::INVERSE_PERP_EXIT;
-    if (s == "synthetic_put_entry") return ConditionType::SYNTHETIC_PUT_ENTRY;
-    if (s == "synthetic_put_exit")  return ConditionType::SYNTHETIC_PUT_EXIT;
+    if (s == "trend_vol_entry")     return ConditionType::TREND_VOL_ENTRY;
+    if (s == "trend_vol_exit")      return ConditionType::TREND_VOL_EXIT;
     std::fprintf(stderr, "[Parser] Unknown condition: '%s', defaulting to price_up\n", s.c_str());
     return ConditionType::PRICE_UP;
 }

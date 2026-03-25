@@ -53,11 +53,15 @@ struct LiveStrategyState {
     double fr_hr = 0.0;
     double fr_ma = 0.0;
 
-    // EMA50 for trend detection
-    double ema50 = 0.0;
+    // EMA rank for Trend+Vol
+    double ema20  = 0.0;
+    double ema50  = 0.0;
+    double ema200 = 0.0;
 
-    // Synthetic put delta
-    double put_delta = 0.0;
+    // MACD tracking
+    double ema12 = 0.0;
+    double ema26 = 0.0;
+    double macd  = 0.0;
 
     explicit LiveStrategyState(const StrategyDef& d) : def(d) {}
 };
@@ -153,13 +157,15 @@ inline void strategy_loop(
                 // Close hedge when RSI cools or price drops below EMA50
                 return (s.rsi < 50.0) || (price < s.ema50);
 
-            // ── Synthetic Put: dynamic delta hedge ──
-            case ConditionType::SYNTHETIC_PUT_ENTRY:
-                // Heavy protection engaged: put_delta > 0.10
-                return s.put_delta > 0.10;
-            case ConditionType::SYNTHETIC_PUT_EXIT:
-                // Protection removed: put_delta normalised
-                return s.put_delta < 0.05;
+            // ── Trend+Vol Filter: multi-factor trend regime ──
+            case ConditionType::TREND_VOL_ENTRY:
+                // BUY: EMA20 > 50 > 200 + vol < 2.0x + RSI 40–70 + MACD > 0
+                return (s.ema20 > s.ema50) && (s.ema50 > s.ema200) && (s.ema200 > 0.0) &&
+                       (s.vol_spike < 2.0) && (s.rsi > 40.0) && (s.rsi < 70.0) && (s.macd > 0.0);
+            case ConditionType::TREND_VOL_EXIT:
+                // SELL: EMA20 < 50 OR vol > 2.5x OR RSI > 80 OR MACD < -1σ
+                // (Note: using -5.0 as a proxy for -1σ if we don't have rolling macd stddev)
+                return (s.ema20 < s.ema50) || (s.vol_spike > 2.5) || (s.rsi > 80.0) || (s.macd < -5.0);
             
             default: return false;
         }
@@ -196,22 +202,26 @@ inline void strategy_loop(
             const auto& def = s.def;
             double price = btc_price_;
 
-            // EMA updates
+            // EMA Updates for Trend+Vol
+            double a20  = 2.0 / (20.0 + 1.0);
+            double a50  = 2.0 / (50.0 + 1.0);
+            double a200 = 2.0 / (200.0 + 1.0);
+            
+            if (s.ema20 <= 0.0)  s.ema20  = price; else s.ema20  = a20 * price + (1.0 - a20) * s.ema20;
+            if (s.ema50 <= 0.0)  s.ema50  = price; else s.ema50  = a50 * price + (1.0 - a50) * s.ema50;
+            if (s.ema200 <= 0.0) s.ema200 = price; else s.ema200 = a200 * price + (1.0 - a200) * s.ema200;
+
+            // MACD Updates
+            double a12 = 2.0 / (12.0 + 1.0);
+            double a26 = 2.0 / (26.0 + 1.0);
+            if (s.ema12 <= 0.0) s.ema12 = price; else s.ema12 = a12 * price + (1.0 - a12) * s.ema12;
+            if (s.ema26 <= 0.0) s.ema26 = price; else s.ema26 = a26 * price + (1.0 - a26) * s.ema26;
+            s.macd = s.ema12 - s.ema26;
+
+            // Legacy EMA update (for compat)
             double ema_alpha = 2.0 / (def.ema_period + 1.0);
             if (s.ema <= 0.0) s.ema = price;
             else              s.ema = ema_alpha * price + (1.0 - ema_alpha) * s.ema;
-            
-            double alpha_short = 2.0 / (9.0 + 1.0);
-            double alpha_long  = 2.0 / (50.0 + 1.0);
-            if (s.ema_short <= 0.0) s.ema_short = price;
-            else s.ema_short = alpha_short * price + (1.0 - alpha_short) * s.ema_short;
-            if (s.ema_long <= 0.0) s.ema_long = price;
-            else s.ema_long = alpha_long * price + (1.0 - alpha_long) * s.ema_long;
-
-            // EMA50 for trend detection
-            double alpha50 = 2.0 / (50.0 + 1.0);
-            if (s.ema50 <= 0.0) s.ema50 = price;
-            else s.ema50 = alpha50 * price + (1.0 - alpha50) * s.ema50;
 
             // RSI update (Wilder's smoothed, 14-period)
             if (s.prev_price > 0.0) {
@@ -261,18 +271,12 @@ inline void strategy_loop(
                 s.bb_upper = mean + 2.5 * stddev;
             }
 
-            // Funding rate proxy from RSI (matches notebook model)
-            // ann_fr = 0.50 * max((RSI/50)² - 1, 0)
+            // Funding rate proxy (matches previous model)
             double rsi_ratio = s.rsi / 50.0;
             double ann_fr = 0.50 * std::max(rsi_ratio * rsi_ratio - 1.0, 0.0);
             s.fr_hr = ann_fr / 8760.0;
-            double fr_alpha = 2.0 / (72.0 + 1.0); // 3-day (72h) smoothing
+            double fr_alpha = 2.0 / (72.0 + 1.0); 
             s.fr_ma = fr_alpha * s.fr_hr + (1.0 - fr_alpha) * s.fr_ma;
-
-            // Synthetic put delta: clip((RSI-50)/50, 0, 1) * clip(vol_spike-1, 0, 2) * 0.5
-            double rsi_factor = std::max(std::min((s.rsi - 50.0) / 50.0, 1.0), 0.0);
-            double vol_factor = std::max(std::min(s.vol_spike - 1.0, 2.0), 0.0);
-            s.put_delta = rsi_factor * vol_factor * 0.5;
 
             Action action = Action::NONE;
             if (s.flat) {

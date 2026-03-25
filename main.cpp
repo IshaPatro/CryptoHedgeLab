@@ -79,7 +79,7 @@ static int run_live_pipeline(const Config& cfg) {
         "../strategies/vol_straddle.json",
         "../strategies/perp_swap_hedge.json",
         "../strategies/inverse_perp_hedge.json",
-        "../strategies/synthetic_put.json"
+        "../strategies/trend_vol_filter.json"
     };
     
     for (const auto& path : paths) {
@@ -150,7 +150,7 @@ static int run_live_pipeline(const Config& cfg) {
 
     boost::asio::io_context ioc;
 
-    auto on_message = [&book_btc, &book_eth, &tick_queue, &kdb_feed_q, &tick_seq](std::string_view msg) {
+    auto on_message = [&book_btc, &book_eth, &tick_queue, &kdb_feed_q, &tick_seq, &ui_state](std::string_view msg) {
         auto stream_type = chl::detect_stream_type(msg);
         auto stream_name = chl::extract_stream(msg);
         
@@ -159,6 +159,15 @@ static int run_live_pipeline(const Config& cfg) {
         if (stream_name.find("eth") != std::string_view::npos) {
             symbol_id = 1;
             active_book = book_eth.get();
+        }
+
+        // Bridge latest prices to UI State immediately for spread/ticker freshness
+        if (ui_state) {
+            ui_state->best_bid.store(active_book->best_bid_price, std::memory_order_relaxed);
+            ui_state->best_ask.store(active_book->best_ask_price, std::memory_order_relaxed);
+            if (active_book->best_bid_price > 0 && active_book->best_ask_price > 0) {
+                ui_state->price.store((active_book->best_bid_price + active_book->best_ask_price) / 2.0, std::memory_order_relaxed);
+            }
         }
 
         if (stream_type == chl::StreamType::TRADE) {

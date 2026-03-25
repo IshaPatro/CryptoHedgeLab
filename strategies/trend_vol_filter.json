@@ -1,0 +1,9 @@
+{
+    "name": "trend_vol_filter",
+    "entry_cond": "trend_vol_entry",
+    "exit_cond": "trend_vol_exit",
+    "size": "0.05",
+    "hedge": {
+        "enabled": "false"
+    }
+}

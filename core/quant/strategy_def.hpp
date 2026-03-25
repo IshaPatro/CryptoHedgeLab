@@ -29,8 +29,8 @@ enum class ConditionType : uint8_t {
     PERP_SWAP_EXIT,         // funding dried up or trend broke
     INVERSE_PERP_ENTRY,     // RSI > 70 + near BB upper + bull regime
     INVERSE_PERP_EXIT,      // RSI < 50 or price < EMA50
-    SYNTHETIC_PUT_ENTRY,    // put_delta > 0.10 (RSI elevated + vol spike)
-    SYNTHETIC_PUT_EXIT      // put_delta < 0.05 (normalisation)
+    TREND_VOL_ENTRY,        // EMA rank + Vol filter + RSI + MACD
+    TREND_VOL_EXIT          // Trend breakage or Vol explosion
 };
 
 // ─── Strategy Definition (immutable, parsed once at startup) ───────────────
@@ -78,8 +78,8 @@ inline const char* condition_name(ConditionType c) {
         case ConditionType::PERP_SWAP_EXIT:     return "perp_swap_exit";
         case ConditionType::INVERSE_PERP_ENTRY: return "inverse_perp_entry";
         case ConditionType::INVERSE_PERP_EXIT:  return "inverse_perp_exit";
-        case ConditionType::SYNTHETIC_PUT_ENTRY:return "synthetic_put_entry";
-        case ConditionType::SYNTHETIC_PUT_EXIT: return "synthetic_put_exit";
+        case ConditionType::TREND_VOL_ENTRY:    return "trend_vol_entry";
+        case ConditionType::TREND_VOL_EXIT:     return "trend_vol_exit";
         default:                               return "unknown";
     }
 }

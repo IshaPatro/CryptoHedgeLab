@@ -41,7 +41,7 @@ inline void execution_loop(SPSCRingBuffer<Signal> &signal_queue,
         if (name == "vol_straddle")       return 5;
         if (name == "perp_swap_hedge")    return 6;
         if (name == "inverse_perp_hedge") return 7;
-        if (name == "synthetic_put")      return 8;
+        if (name == "trend_vol_filter")   return 8;
         return -1;
     };
 
